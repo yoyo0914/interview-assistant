@@ -1,0 +1,7 @@
+#檔案
+*Zone.Identifier   
+.env
+#資料夾
+learn/
+venv/
+__pycache__/
