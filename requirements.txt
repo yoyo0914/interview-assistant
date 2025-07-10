@@ -12,3 +12,4 @@ sqlalchemy==2.0.23
 
 # 開發工具
 requests==2.31.0
+openai

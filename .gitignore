@@ -4,4 +4,7 @@
 #資料夾
 learn/
 venv/
+mysql/
 __pycache__/
+
+key.txt

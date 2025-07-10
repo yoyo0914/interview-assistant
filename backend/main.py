@@ -8,6 +8,8 @@ from datetime import datetime, timedelta
 from config import config
 from models import User, Email, InterviewInvitation, DraftReply
 from database import create_tables, get_db
+from gmail_service import get_gmail_service
+from openai_service import get_openai_service
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
@@ -57,7 +59,8 @@ async def root():
         "status": "ready",
         "endpoints": {
             "auth": ["/login", "/auth/callback"],
-            "gmail": ["/test-gmail", "/user-info"],
+            "gmail": ["/test-gmail", "/sync-emails/{user_id}", "/emails/{user_id}", "/gmail-status/{user_id}"],
+            "ai": ["/analyze-email/{email_id}", "/extract-info/{email_id}", "/generate-reply/{email_id}"],
             "database": ["/test-db", "/test-user", "/users"]
         }
     }
@@ -289,6 +292,264 @@ async def get_user(user_id: int, db: Session = Depends(get_db)):
             "message": str(e)
         }, status_code=500)
 
+@app.post("/sync-emails/{user_id}")
+async def sync_emails(user_id: int, max_results: int = 20):
+    try:
+        gmail_service = get_gmail_service(user_id)
+        synced_count = gmail_service.sync_recent_emails(max_results)
+        
+        return {
+            "success": True,
+            "message": f"Synced {synced_count} emails",
+            "synced_count": synced_count
+        }
+    except Exception as e:
+        return JSONResponse({
+            "success": False,
+            "error": "sync_failed",
+            "message": str(e)
+        }, status_code=500)
+
+@app.get("/emails/{user_id}")
+async def get_user_emails(user_id: int, limit: int = 10, db: Session = Depends(get_db)):
+    try:
+        emails = db.query(Email).filter(
+            Email.user_id == user_id
+        ).order_by(Email.received_at.desc()).limit(limit).all()
+        
+        return {
+            "success": True,
+            "emails": [
+                {
+                    "id": email.id,
+                    "subject": email.subject,
+                    "sender": email.sender,
+                    "received_at": email.received_at,
+                    "is_interview_related": email.is_interview_related,
+                    "body_preview": email.body_text[:200] + "..." if email.body_text and len(email.body_text) > 200 else email.body_text
+                }
+                for email in emails
+            ]
+        }
+    except Exception as e:
+        return JSONResponse({
+            "success": False,
+            "error": "emails_fetch_failed",
+            "message": str(e)
+        }, status_code=500)
+
+@app.get("/gmail-status/{user_id}")
+async def gmail_status(user_id: int, db: Session = Depends(get_db)):
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # 檢查 token 是否存在
+        has_token = bool(user.access_token)
+        token_expired = False
+        
+        if user.token_expires_at:
+            token_expired = datetime.utcnow() > user.token_expires_at
+        
+        # 統計郵件數量
+        email_count = db.query(Email).filter(Email.user_id == user_id).count()
+        interview_count = db.query(Email).filter(
+            Email.user_id == user_id,
+            Email.is_interview_related == True
+        ).count()
+        
+        return {
+            "success": True,
+            "user_id": user_id,
+            "email": user.email,
+            "gmail_connected": has_token and not token_expired,
+            "token_expired": token_expired,
+            "stats": {
+                "total_emails": email_count,
+                "interview_emails": interview_count
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        return JSONResponse({
+            "success": False,
+            "error": "status_check_failed",
+            "message": str(e)
+        }, status_code=500)
+
+@app.post("/analyze-email/{email_id}")
+async def analyze_email(email_id: int, db: Session = Depends(get_db)):
+    try:
+        email = db.query(Email).filter(Email.id == email_id).first()
+        if not email:
+            raise HTTPException(status_code=404, detail="Email not found")
+        
+        openai_service = get_openai_service()
+        is_interview, confidence = openai_service.is_interview_email(
+            email.subject or "", 
+            email.body_text or ""
+        )
+        
+        # 更新資料庫
+        email.is_interview_related = is_interview
+        db.commit()
+        
+        return {
+            "success": True,
+            "email_id": email_id,
+            "subject": email.subject,
+            "is_interview": is_interview,
+            "confidence": confidence,
+            "message": "分析完成並已更新資料庫"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        return JSONResponse({
+            "success": False,
+            "error": "analysis_failed",
+            "message": str(e)
+        }, status_code=500)
+
+@app.post("/extract-info/{email_id}")
+async def extract_interview_info(email_id: int, db: Session = Depends(get_db)):
+    try:
+        email = db.query(Email).filter(Email.id == email_id).first()
+        if not email:
+            raise HTTPException(status_code=404, detail="Email not found")
+        
+        openai_service = get_openai_service()
+        interview_info = openai_service.extract_interview_info(
+            email.subject or "",
+            email.body_text or ""
+        )
+        
+        if not interview_info:
+            return JSONResponse({
+                "success": False,
+                "error": "extraction_failed",
+                "message": "無法提取面試資訊"
+            }, status_code=400)
+        
+        # 儲存到資料庫
+        existing_invitation = db.query(InterviewInvitation).filter(
+            InterviewInvitation.email_id == email_id
+        ).first()
+        
+        if existing_invitation:
+            # 更新現有記錄
+            for key, value in interview_info.items():
+                if key != "confidence_score" and value is not None:
+                    setattr(existing_invitation, key, value)
+            existing_invitation.confidence_score = interview_info.get("confidence_score", 0)
+            invitation = existing_invitation
+        else:
+            # 建立新記錄
+            invitation = InterviewInvitation(
+                email_id=email_id,
+                company_name=interview_info.get("company_name"),
+                position=interview_info.get("position"),
+                interview_time=interview_info.get("interview_time"),
+                interview_location=interview_info.get("interview_location"),
+                interview_type=interview_info.get("interview_type"),
+                interviewer_name=interview_info.get("interviewer_name"),
+                interviewer_email=interview_info.get("interviewer_email"),
+                additional_info=interview_info.get("additional_info"),
+                confidence_score=interview_info.get("confidence_score", 0)
+            )
+            db.add(invitation)
+        
+        db.commit()
+        db.refresh(invitation)
+        
+        return {
+            "success": True,
+            "email_id": email_id,
+            "invitation_id": invitation.id,
+            "extracted_info": interview_info
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        return JSONResponse({
+            "success": False,
+            "error": "extraction_failed",
+            "message": str(e)
+        }, status_code=500)
+
+@app.post("/generate-reply/{email_id}")
+async def generate_reply(email_id: int, tone: str = "professional", db: Session = Depends(get_db)):
+    try:
+        # 取得郵件和面試資訊
+        email = db.query(Email).filter(Email.id == email_id).first()
+        if not email:
+            raise HTTPException(status_code=404, detail="Email not found")
+        
+        invitation = db.query(InterviewInvitation).filter(
+            InterviewInvitation.email_id == email_id
+        ).first()
+        
+        if not invitation:
+            return JSONResponse({
+                "success": False,
+                "error": "no_interview_info",
+                "message": "請先提取面試資訊"
+            }, status_code=400)
+        
+        # 準備面試資訊
+        interview_info = {
+            "company_name": invitation.company_name,
+            "position": invitation.position,
+            "interview_date": str(invitation.interview_date) if invitation.interview_date else None,
+            "interview_time": invitation.interview_time,
+            "interview_location": invitation.interview_location,
+            "interview_type": invitation.interview_type,
+            "interviewer_name": invitation.interviewer_name
+        }
+        
+        # 生成回信
+        openai_service = get_openai_service()
+        reply_body = openai_service.generate_reply(interview_info, tone)
+        reply_subject = openai_service.generate_reply_subject(email.subject or "")
+        
+        if not reply_body:
+            return JSONResponse({
+                "success": False,
+                "error": "generation_failed",
+                "message": "無法生成回信"
+            }, status_code=400)
+        
+        # 儲存草稿
+        draft = DraftReply(
+            interview_invitation_id=invitation.id,
+            subject=reply_subject,
+            body=reply_body,
+            tone=tone
+        )
+        
+        db.add(draft)
+        db.commit()
+        db.refresh(draft)
+        
+        return {
+            "success": True,
+            "email_id": email_id,
+            "draft_id": draft.id,
+            "subject": reply_subject,
+            "body": reply_body,
+            "tone": tone
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        return JSONResponse({
+            "success": False,
+            "error": "generation_failed",
+            "message": str(e)
+        }, status_code=500)
+
 if __name__ == "__main__":
     print("Starting Interview Assistant API...")
     print("Test URLs:")
@@ -297,5 +558,9 @@ if __name__ == "__main__":
     print("  - Test DB: http://localhost:8000/test-db")
     print("  - Create Test User: http://localhost:8000/test-user")
     print("  - List Users: http://localhost:8000/users")
+    print("Gmail endpoints (需要先認證):")
+    print("  - Sync Emails: POST http://localhost:8000/sync-emails/1")
+    print("  - View Emails: http://localhost:8000/emails/1")
+    print("  - Gmail Status: http://localhost:8000/gmail-status/1")
     
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
