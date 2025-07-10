@@ -75,6 +75,8 @@ async def login():
     ]
     
     auth_url = create_oauth_url(scopes)
+    
+    # 直接重定向到 Google OAuth
     return RedirectResponse(url=auth_url)
 
 @app.get("/auth/callback")
@@ -82,19 +84,19 @@ async def auth_callback(request: Request, db: Session = Depends(get_db)):
     params = dict(request.query_params)
     
     if 'error' in params:
-        return JSONResponse({
-            "success": False,
-            "error": params.get('error'),
-            "error_description": params.get('error_description')
-        }, status_code=400)
+        # 錯誤時重定向到登入頁面
+        error_msg = params.get('error_description', params.get('error'))
+        return RedirectResponse(
+            url=f"http://localhost:8080/login.html?error={error_msg}",
+            status_code=302
+        )
     
     code = params.get('code')
     if not code:
-        return JSONResponse({
-            "success": False,
-            "error": "missing_code",
-            "message": "No authorization code received"
-        }, status_code=400)
+        return RedirectResponse(
+            url="http://localhost:8080/login.html?error=missing_code",
+            status_code=302
+        )
     
     try:
         token_data = exchange_code_for_token(code)
@@ -134,26 +136,17 @@ async def auth_callback(request: Request, db: Session = Depends(get_db)):
         
         db.commit()
         
-        return {
-            "success": True,
-            "message": "Authentication successful",
-            "user": {
-                "id": user.id,
-                "email": user.email,
-                "name": user.name
-            },
-            "token_info": {
-                "expires_in": token_data.get("expires_in"),
-                "granted_scopes": token_data.get("scope")
-            }
-        }
+        # 成功後重定向到前端 dashboard
+        return RedirectResponse(
+            url=f"http://localhost:8080/dashboard.html?success=true&user_id={user.id}",
+            status_code=302
+        )
         
     except Exception as e:
-        return JSONResponse({
-            "success": False,
-            "error": "authentication_failed",
-            "message": str(e)
-        }, status_code=500)
+        return RedirectResponse(
+            url=f"http://localhost:8080/login.html?error=authentication_failed",
+            status_code=302
+        )
 
 @app.get("/test-gmail")
 async def test_gmail(access_token: str = None):
