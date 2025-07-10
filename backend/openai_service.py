@@ -5,9 +5,7 @@ from typing import Dict, Optional, Tuple
 import logging
 from dotenv import load_dotenv
 
-# 確保載入環境變數
 load_dotenv()
-
 logger = logging.getLogger(__name__)
 
 class OpenAIService:
@@ -17,39 +15,63 @@ class OpenAIService:
             raise ValueError("OpenAI API key not found")
         
         self.client = OpenAI(api_key=self.api_key)
-        self.model = "gpt-4o-mini"  # 使用較便宜的模型
+        self.model = "gpt-4o-mini"
     
-    def is_interview_email(self, subject: str, body: str) -> Tuple[bool, float]:
-        """
-        判斷郵件是否為面試邀請
-        返回: (是否為面試邀請, 信心分數 0-100)
-        """
+    def detect_language(self, subject: str, body: str) -> str:
+        """檢測郵件主要語言"""
         try:
             prompt = f"""
-請分析以下郵件是否為面試邀請。
+Analyze the following email and determine its primary language.
 
-主旨: {subject}
+Subject: {subject}
+Content: {body[:500]}
 
-內容: {body[:1500]}
-
-請以 JSON 格式回應：
-{{
-    "is_interview": true/false,
-    "confidence": 0-100的信心分數,
-    "reason": "判斷理由"
-}}
-
-判斷標準：
-- 包含面試、interview、會談等詞彙
-- 提到時間安排
-- 來自公司 HR 或招聘人員
-- 職位相關內容
+Respond with only one word: "chinese" or "english"
 """
 
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "你是專業的郵件分析專家，專門識別面試邀請。"},
+                    {"role": "system", "content": "You are a language detection expert."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.1
+            )
+            
+            result = response.choices[0].message.content.strip().lower()
+            return "chinese" if "chinese" in result else "english"
+            
+        except Exception as e:
+            logger.error(f"Failed to detect language: {e}")
+            return "english"  # 預設英文
+    
+    def is_interview_email(self, subject: str, body: str) -> Tuple[bool, float]:
+        """判斷郵件是否為面試邀請（支援中英文）"""
+        try:
+            prompt = f"""
+Analyze if the following email is an interview invitation.
+
+Subject: {subject}
+Content: {body[:1500]}
+
+Respond in JSON format:
+{{
+    "is_interview": true/false,
+    "confidence": confidence score 0-100,
+    "reason": "reason for judgment"
+}}
+
+Criteria:
+- Contains interview-related keywords (interview, 面試, meeting, 會談, etc.)
+- Mentions time scheduling
+- From company HR or recruiter
+- Job position related content
+"""
+
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": "You are a professional email analysis expert specializing in identifying interview invitations."},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.1
@@ -63,38 +85,35 @@ class OpenAIService:
             return False, 0
     
     def extract_interview_info(self, subject: str, body: str) -> Optional[Dict]:
-        """
-        從面試邀請中提取詳細資訊
-        """
+        """從面試邀請中提取詳細資訊（支援中英文）"""
         try:
             prompt = f"""
-請從以下面試邀請郵件中提取詳細資訊。
+Extract detailed information from the following interview invitation email.
 
-主旨: {subject}
+Subject: {subject}
+Content: {body}
 
-內容: {body}
-
-請以 JSON 格式回應，提取以下資訊：
+Respond in JSON format with the following information:
 {{
-    "company_name": "公司名稱",
-    "position": "職位名稱", 
-    "interview_date": "面試日期 (YYYY-MM-DD 格式，如果有的話)",
-    "interview_time": "面試時間",
-    "interview_location": "面試地點 (線上/實體地址)",
-    "interview_type": "online/onsite/phone 其中一種",
-    "interviewer_name": "面試官姓名",
-    "interviewer_email": "面試官信箱",
-    "additional_info": "其他重要資訊",
-    "confidence_score": 0-100的提取信心分數
+    "company_name": "company name",
+    "position": "job position", 
+    "interview_date": "interview date (YYYY-MM-DD format if available)",
+    "interview_time": "interview time",
+    "interview_location": "interview location (online/physical address)",
+    "interview_type": "one of: online/onsite/phone",
+    "interviewer_name": "interviewer name",
+    "interviewer_email": "interviewer email",
+    "additional_info": "other important information",
+    "confidence_score": "extraction confidence score 0-100"
 }}
 
-如果某項資訊未提及，請填入 null。
+If any information is not mentioned, fill with null.
 """
 
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "你是專業的資訊提取專家，專門從面試邀請中提取結構化資訊。"},
+                    {"role": "system", "content": "You are a professional information extraction expert specializing in extracting structured information from interview invitations."},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.1
@@ -107,24 +126,34 @@ class OpenAIService:
             logger.error(f"Failed to extract interview info: {e}")
             return None
     
-    def generate_reply(self, interview_info: Dict, tone: str = "professional") -> Optional[str]:
-        """
-        生成面試回信草稿
-        
-        Args:
-            interview_info: 面試資訊字典
-            tone: 回信語調 professional/friendly/formal
-        """
+    def generate_reply(self, interview_info: Dict, tone: str = "professional", language: str = None) -> Optional[str]:
+        """生成面試回信草稿（支援中英文）"""
         try:
-            tone_instructions = {
-                "professional": "專業且有禮貌",
-                "friendly": "友善且熱忱",
-                "formal": "正式且謹慎"
-            }
+            # 如果沒指定語言，根據公司名稱判斷
+            if not language:
+                company_name = interview_info.get('company_name', '')
+                language = self.detect_language(company_name, str(interview_info))
             
-            tone_desc = tone_instructions.get(tone, "專業且有禮貌")
-            
-            prompt = f"""
+            if language == "chinese":
+                return self._generate_chinese_reply(interview_info, tone)
+            else:
+                return self._generate_english_reply(interview_info, tone)
+                
+        except Exception as e:
+            logger.error(f"Failed to generate reply: {e}")
+            return None
+    
+    def _generate_chinese_reply(self, interview_info: Dict, tone: str) -> Optional[str]:
+        """生成中文回信"""
+        tone_instructions = {
+            "professional": "專業且有禮貌",
+            "friendly": "友善且熱忱", 
+            "formal": "正式且謹慎"
+        }
+        
+        tone_desc = tone_instructions.get(tone, "專業且有禮貌")
+        
+        prompt = f"""
 請根據以下面試資訊生成一封{tone_desc}的回信草稿。
 
 面試資訊：
@@ -148,27 +177,70 @@ class OpenAIService:
 請直接回傳郵件內容，不需要額外說明。
 """
 
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": "你是專業的商務郵件撰寫專家，擅長撰寫各種語調的回信。"},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.3
-            )
-            
-            return response.choices[0].message.content.strip()
-            
-        except Exception as e:
-            logger.error(f"Failed to generate reply: {e}")
-            return None
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": "你是專業的商務郵件撰寫專家，擅長撰寫各種語調的回信。"},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.3
+        )
+        
+        return response.choices[0].message.content.strip()
     
-    def generate_reply_subject(self, original_subject: str) -> str:
-        """
-        生成回信主旨
-        """
+    def _generate_english_reply(self, interview_info: Dict, tone: str) -> Optional[str]:
+        """生成英文回信"""
+        tone_instructions = {
+            "professional": "professional and polite",
+            "friendly": "friendly and enthusiastic",
+            "formal": "formal and courteous"
+        }
+        
+        tone_desc = tone_instructions.get(tone, "professional and polite")
+        
+        prompt = f"""
+Generate a {tone_desc} reply email based on the following interview information.
+
+Interview Information:
+- Company: {interview_info.get('company_name', 'Unknown')}
+- Position: {interview_info.get('position', 'Unknown')}
+- Interview Date: {interview_info.get('interview_date', 'Unknown')}
+- Interview Time: {interview_info.get('interview_time', 'Unknown')}
+- Interview Location: {interview_info.get('interview_location', 'Unknown')}
+- Interview Type: {interview_info.get('interview_type', 'Unknown')}
+- Interviewer: {interview_info.get('interviewer_name', 'Unknown')}
+
+Reply requirements:
+1. Thank for the interview opportunity
+2. Confirm attendance
+3. Confirm interview time and location
+4. Express enthusiasm
+5. Use {tone_desc} tone
+6. Proper email format
+7. Professional business English
+
+Return only the email content without additional explanations.
+"""
+
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": "You are a professional business email writing expert skilled in crafting replies with various tones."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.3
+        )
+        
+        return response.choices[0].message.content.strip()
+    
+    def generate_reply_subject(self, original_subject: str, language: str = None) -> str:
+        """生成回信主旨（支援中英文）"""
         try:
-            prompt = f"""
+            if not language:
+                language = self.detect_language(original_subject, "")
+            
+            if language == "chinese":
+                prompt = f"""
 請為以下面試邀請郵件生成適當的回信主旨。
 
 原主旨: {original_subject}
@@ -180,11 +252,26 @@ class OpenAIService:
 
 請直接回傳主旨，不需要額外說明。
 """
+                system_content = "你是專業的郵件主旨專家。"
+            else:
+                prompt = f"""
+Generate an appropriate reply subject for the following interview invitation email.
+
+Original Subject: {original_subject}
+
+Reply subject requirements:
+1. Indicate this is a reply (Re:)
+2. Keep it concise and professional
+3. Use English
+
+Return only the subject line without additional explanations.
+"""
+                system_content = "You are a professional email subject line expert."
 
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "你是專業的郵件主旨專家。"},
+                    {"role": "system", "content": system_content},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.1
@@ -196,7 +283,6 @@ class OpenAIService:
             logger.error(f"Failed to generate subject: {e}")
             return f"Re: {original_subject}"
 
-# 便利函數
 def get_openai_service() -> OpenAIService:
     """取得 OpenAI 服務實例"""
     return OpenAIService()
