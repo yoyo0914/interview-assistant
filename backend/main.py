@@ -1,20 +1,22 @@
-from fastapi import FastAPI, Request, Depends
+from fastapi import FastAPI, Request, Depends, HTTPException
 from fastapi.responses import RedirectResponse, JSONResponse
+from sqlalchemy.orm import Session
 import uvicorn
 import requests
 import urllib.parse
+from datetime import datetime, timedelta
 from config import config
+from models import create_tables, get_db, User, Email, InterviewInvitation, DraftReply
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
 app = FastAPI()
 
-# 使用已驗證有效的方法
+# Initialize database
+create_tables()
+
 def create_oauth_url(scopes: list):
-    """建立 OAuth URL"""
     base_url = "https://accounts.google.com/o/oauth2/auth"
-    
-    # 將 scopes 轉換為空格分隔的字串
     scope_string = " ".join(scopes)
     
     params = {
@@ -31,7 +33,6 @@ def create_oauth_url(scopes: list):
     return f"{base_url}?{query_string}"
 
 def exchange_code_for_token(code: str):
-    """將授權碼交換為 access token"""
     token_url = "https://oauth2.googleapis.com/token"
     data = {
         "client_id": config.GOOGLE_CLIENT_ID,
@@ -51,21 +52,17 @@ def exchange_code_for_token(code: str):
 @app.get("/")
 async def root():
     return {
-        "message": "🎉 Interview Assistant - Gmail OAuth 應用",
+        "message": "Interview Assistant API",
         "status": "ready",
-        "available_endpoints": [
-            "/login - 完整 Gmail 權限登入",
-            "/login-readonly - 只讀權限登入", 
-            "/test-gmail - 測試 Gmail API 呼叫",
-            "/user-info - 取得用戶資訊"
-        ]
+        "endpoints": {
+            "auth": ["/login", "/auth/callback"],
+            "gmail": ["/test-gmail", "/user-info"],
+            "database": ["/test-db", "/test-user", "/users"]
+        }
     }
 
 @app.get("/login")
 async def login():
-    """完整的 Gmail 權限登入"""
-    
-    # 使用兩個 Gmail 權限
     scopes = [
         "https://www.googleapis.com/auth/gmail.readonly",
         "https://www.googleapis.com/auth/gmail.send",
@@ -76,101 +73,101 @@ async def login():
     auth_url = create_oauth_url(scopes)
     return RedirectResponse(url=auth_url)
 
-@app.get("/login-readonly")
-async def login_readonly():
-    """只讀權限登入"""
-    
-    scopes = [
-        "https://www.googleapis.com/auth/gmail.readonly",
-        "https://www.googleapis.com/auth/userinfo.email"
-    ]
-    
-    auth_url = create_oauth_url(scopes)
-    return RedirectResponse(url=auth_url)
-
 @app.get("/auth/callback")
-async def auth_callback(request: Request):
-    """處理 OAuth 回調"""
-    
+async def auth_callback(request: Request, db: Session = Depends(get_db)):
     params = dict(request.query_params)
     
-    # 檢查錯誤
     if 'error' in params:
         return JSONResponse({
             "success": False,
             "error": params.get('error'),
-            "error_description": params.get('error_description'),
-            "full_params": params
+            "error_description": params.get('error_description')
         }, status_code=400)
     
-    # 檢查授權碼
     code = params.get('code')
     if not code:
         return JSONResponse({
             "success": False,
             "error": "missing_code",
-            "message": "沒有收到授權碼"
+            "message": "No authorization code received"
         }, status_code=400)
     
-    # 交換 token
     try:
         token_data = exchange_code_for_token(code)
         
-        # 儲存到 session 或資料庫（這裡先返回給前端）
+        # Get user info
+        user_response = requests.get(
+            "https://www.googleapis.com/oauth2/v2/userinfo",
+            headers={"Authorization": f"Bearer {token_data['access_token']}"},
+            timeout=10
+        )
+        
+        if user_response.status_code != 200:
+            raise Exception("Failed to get user info")
+        
+        user_info = user_response.json()
+        
+        # Save or update user in database
+        user = db.query(User).filter(User.google_id == user_info['id']).first()
+        
+        if user:
+            # Update existing user
+            user.access_token = token_data['access_token']
+            user.refresh_token = token_data.get('refresh_token')
+            user.token_expires_at = datetime.utcnow() + timedelta(seconds=token_data.get('expires_in', 3600))
+            user.updated_at = datetime.utcnow()
+        else:
+            # Create new user
+            user = User(
+                google_id=user_info['id'],
+                email=user_info['email'],
+                name=user_info.get('name'),
+                access_token=token_data['access_token'],
+                refresh_token=token_data.get('refresh_token'),
+                token_expires_at=datetime.utcnow() + timedelta(seconds=token_data.get('expires_in', 3600))
+            )
+            db.add(user)
+        
+        db.commit()
+        
         return {
             "success": True,
-            "message": "🎉 Gmail OAuth 認證成功！",
-            "token_info": {
-                "has_access_token": "access_token" in token_data,
-                "has_refresh_token": "refresh_token" in token_data,
-                "expires_in": token_data.get("expires_in"),
-                "granted_scopes": token_data.get("scope"),
-                "token_type": token_data.get("token_type")
+            "message": "Authentication successful",
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "name": user.name
             },
-            "next_steps": [
-                "✅ 認證完成",
-                "📧 可以存取 Gmail API",
-                "🔧 嘗試 /test-gmail 來測試 API 呼叫"
-            ],
-            # 實際應用中不應該返回 token，這裡只是測試用
-            "access_token": token_data.get("access_token"),
-            "refresh_token": token_data.get("refresh_token")
+            "token_info": {
+                "expires_in": token_data.get("expires_in"),
+                "granted_scopes": token_data.get("scope")
+            }
         }
         
     except Exception as e:
         return JSONResponse({
             "success": False,
-            "error": "token_exchange_failed",
-            "message": f"Token 交換失敗: {str(e)}"
+            "error": "authentication_failed",
+            "message": str(e)
         }, status_code=500)
 
 @app.get("/test-gmail")
 async def test_gmail(access_token: str = None):
-    """測試 Gmail API 呼叫"""
-    
     if not access_token:
         return {
-            "error": "需要 access_token 參數",
-            "message": "請先完成 OAuth 認證，然後提供 access_token",
+            "error": "access_token parameter required",
             "example": "/test-gmail?access_token=your_token_here"
         }
     
     try:
-        # 建立 credentials
         credentials = Credentials(token=access_token)
-        
-        # 建立 Gmail 服務
         service = build('gmail', 'v1', credentials=credentials)
         
-        # 測試取得用戶資料
         profile = service.users().getProfile(userId='me').execute()
-        
-        # 測試取得信件列表（最多 5 封）
         messages = service.users().messages().list(userId='me', maxResults=5).execute()
         
         return {
             "success": True,
-            "message": "✅ Gmail API 測試成功！",
             "profile": {
                 "email": profile.get('emailAddress'),
                 "total_messages": profile.get('messagesTotal'),
@@ -186,68 +183,118 @@ async def test_gmail(access_token: str = None):
         return JSONResponse({
             "success": False,
             "error": "gmail_api_failed",
-            "message": f"Gmail API 呼叫失敗: {str(e)}"
+            "message": str(e)
         }, status_code=500)
 
-@app.get("/show-last-token")
-async def show_last_token():
-    """顯示最後一次認證的 token - 僅用於測試"""
-    return {
-        "message": "請重新進行 OAuth 認證以獲取新的 token",
-        "auth_url": "/login"
-    }
-
-@app.get("/user-info")
-async def get_user_info(access_token: str = None):
-    """取得用戶基本資訊"""
-    
-    if not access_token:
-        return {
-            "error": "需要 access_token 參數",
-            "example": "/user-info?access_token=your_token_here"
-        }
-    
+@app.get("/test-db")
+async def test_database(db: Session = Depends(get_db)):
     try:
-        # 使用 Google userinfo API
-        response = requests.get(
-            "https://www.googleapis.com/oauth2/v2/userinfo",
-            headers={"Authorization": f"Bearer {access_token}"},
-            timeout=10
-        )
+        # Test database connection
+        user_count = db.query(User).count()
+        email_count = db.query(Email).count()
         
-        if response.status_code == 200:
-            user_data = response.json()
-            return {
-                "success": True,
-                "user": {
-                    "id": user_data.get('id'),
-                    "email": user_data.get('email'),
-                    "name": user_data.get('name'),
-                    "picture": user_data.get('picture'),
-                    "verified_email": user_data.get('verified_email')
-                }
+        return {
+            "success": True,
+            "database": "connected",
+            "stats": {
+                "users": user_count,
+                "emails": email_count
             }
-        else:
-            return JSONResponse({
-                "success": False,
-                "error": "userinfo_failed",
-                "status_code": response.status_code
-            }, status_code=500)
-            
+        }
     except Exception as e:
         return JSONResponse({
             "success": False,
-            "error": "userinfo_exception",
+            "error": "database_error",
+            "message": str(e)
+        }, status_code=500)
+
+@app.post("/test-user")
+async def create_test_user(db: Session = Depends(get_db)):
+    try:
+        test_user = User(
+            google_id="test_123",
+            email="test@example.com",
+            name="Test User",
+            access_token="test_token",
+            refresh_token="test_refresh"
+        )
+        
+        db.add(test_user)
+        db.commit()
+        db.refresh(test_user)
+        
+        return {
+            "success": True,
+            "user": {
+                "id": test_user.id,
+                "email": test_user.email,
+                "name": test_user.name,
+                "created_at": test_user.created_at
+            }
+        }
+    except Exception as e:
+        return JSONResponse({
+            "success": False,
+            "error": "user_creation_failed",
+            "message": str(e)
+        }, status_code=500)
+
+@app.get("/users")
+async def get_users(db: Session = Depends(get_db)):
+    try:
+        users = db.query(User).all()
+        return {
+            "success": True,
+            "users": [
+                {
+                    "id": user.id,
+                    "email": user.email,
+                    "name": user.name,
+                    "created_at": user.created_at
+                }
+                for user in users
+            ]
+        }
+    except Exception as e:
+        return JSONResponse({
+            "success": False,
+            "error": "users_fetch_failed",
+            "message": str(e)
+        }, status_code=500)
+
+@app.get("/users/{user_id}")
+async def get_user(user_id: int, db: Session = Depends(get_db)):
+    try:
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        return {
+            "success": True,
+            "user": {
+                "id": user.id,
+                "email": user.email,
+                "name": user.name,
+                "created_at": user.created_at,
+                "email_count": len(user.emails)
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        return JSONResponse({
+            "success": False,
+            "error": "user_fetch_failed",
             "message": str(e)
         }, status_code=500)
 
 if __name__ == "__main__":
-    print("🚀 啟動完整的 Gmail OAuth 應用...")
-    print("🔗 測試網址:")
-    print("  - 首頁: http://localhost:8000")
-    print("  - 🔐 完整登入: http://localhost:8000/login")
-    print("  - 📖 只讀登入: http://localhost:8000/login-readonly")
-    print("  - 📧 測試 Gmail API: http://localhost:8000/test-gmail?access_token=YOUR_TOKEN")
-    print("  - 👤 用戶資訊: http://localhost:8000/user-info?access_token=YOUR_TOKEN")
+    print("Starting Interview Assistant API...")
+    print("Test URLs:")
+    print("  - Home: http://localhost:8000")
+    print("  - Login: http://localhost:8000/login")
+    print("  - Test DB: http://localhost:8000/test-db")
+    print("  - Create Test User: http://localhost:8000/test-user")
+    print("  - List Users: http://localhost:8000/users")
     
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
