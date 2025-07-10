@@ -6,7 +6,8 @@ import requests
 import urllib.parse
 from datetime import datetime, timedelta
 from config import config
-from models import create_tables, get_db, User, Email, InterviewInvitation, DraftReply
+from models import User, Email, InterviewInvitation, DraftReply
+from database import create_tables, get_db
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
