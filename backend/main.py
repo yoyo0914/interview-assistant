@@ -543,6 +543,200 @@ async def generate_reply(email_id: int, tone: str = "professional", db: Session 
             "message": str(e)
         }, status_code=500)
 
+@app.get("/email-detail/{email_id}")
+async def get_email_detail(email_id: int, db: Session = Depends(get_db)):
+    """取得郵件詳細內容"""
+    try:
+        email = db.query(Email).filter(Email.id == email_id).first()
+        if not email:
+            raise HTTPException(status_code=404, detail="Email not found")
+        
+        # 檢查是否有相關的面試邀請資訊
+        invitation = db.query(InterviewInvitation).filter(
+            InterviewInvitation.email_id == email_id
+        ).first()
+        
+        return {
+            "success": True,
+            "email": {
+                "id": email.id,
+                "subject": email.subject,
+                "sender": email.sender,
+                "recipient": email.recipient,
+                "body_text": email.body_text,
+                "body_html": email.body_html,
+                "received_at": email.received_at,
+                "is_interview_related": email.is_interview_related
+            },
+            "interview_invitation": {
+                "id": invitation.id,
+                "company_name": invitation.company_name,
+                "position": invitation.position,
+                "interview_date": invitation.interview_date,
+                "interview_time": invitation.interview_time,
+                "interview_location": invitation.interview_location,
+                "interview_type": invitation.interview_type,
+                "interviewer_name": invitation.interviewer_name,
+                "interviewer_email": invitation.interviewer_email,
+                "additional_info": invitation.additional_info,
+                "confidence_score": invitation.confidence_score
+            } if invitation else None
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        return JSONResponse({
+            "success": False,
+            "error": "email_detail_failed",
+            "message": str(e)
+        }, status_code=500)
+
+@app.post("/send-reply/{draft_id}")
+async def send_reply(draft_id: int, db: Session = Depends(get_db)):
+    """發送回信草稿"""
+    try:
+        # 取得草稿
+        draft = db.query(DraftReply).filter(DraftReply.id == draft_id).first()
+        if not draft:
+            raise HTTPException(status_code=404, detail="Draft not found")
+        
+        # 取得相關的面試邀請和郵件
+        invitation = db.query(InterviewInvitation).filter(
+            InterviewInvitation.id == draft.interview_invitation_id
+        ).first()
+        
+        if not invitation:
+            raise HTTPException(status_code=404, detail="Interview invitation not found")
+        
+        email = db.query(Email).filter(Email.id == invitation.email_id).first()
+        if not email:
+            raise HTTPException(status_code=404, detail="Original email not found")
+        
+        # 使用 Gmail 服務發送郵件
+        gmail_service = get_gmail_service(email.user_id)
+        result = gmail_service.send_email(
+            to=email.sender,
+            subject=draft.subject,
+            body=draft.body
+        )
+        
+        if result:
+            # 更新草稿狀態
+            draft.is_sent = True
+            draft.sent_at = datetime.utcnow()
+            db.commit()
+            
+            return {
+                "success": True,
+                "message": "郵件發送成功",
+                "gmail_message_id": result.get('id')
+            }
+        else:
+            return JSONResponse({
+                "success": False,
+                "error": "send_failed",
+                "message": "郵件發送失敗"
+            }, status_code=500)
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        return JSONResponse({
+            "success": False,
+            "error": "send_failed", 
+            "message": str(e)
+        }, status_code=500)
+
+@app.post("/analyze-all-emails/{user_id}")
+async def analyze_all_emails_batch(user_id: int, limit: int = 50, db: Session = Depends(get_db)):
+    """批量分析用戶的郵件"""
+    try:
+        # 取得用戶的郵件
+        emails = db.query(Email).filter(
+            Email.user_id == user_id
+        ).order_by(Email.received_at.desc()).limit(limit).all()
+        
+        if not emails:
+            return {
+                "success": True,
+                "message": "沒有郵件需要分析",
+                "analyzed_count": 0,
+                "interview_count": 0
+            }
+        
+        openai_service = get_openai_service()
+        analyzed_count = 0
+        interview_count = 0
+        
+        for email in emails:
+            try:
+                # 分析郵件
+                is_interview, confidence = openai_service.is_interview_email(
+                    email.subject or "", 
+                    email.body_text or ""
+                )
+                
+                # 更新郵件狀態
+                email.is_interview_related = is_interview
+                email.is_processed = True
+                
+                analyzed_count += 1
+                if is_interview:
+                    interview_count += 1
+                    
+                    # 如果是面試邀請，提取詳細資訊
+                    try:
+                        interview_info = openai_service.extract_interview_info(
+                            email.subject or "",
+                            email.body_text or ""
+                        )
+                        
+                        if interview_info:
+                            # 檢查是否已存在面試邀請記錄
+                            existing_invitation = db.query(InterviewInvitation).filter(
+                                InterviewInvitation.email_id == email.id
+                            ).first()
+                            
+                            if not existing_invitation:
+                                invitation = InterviewInvitation(
+                                    email_id=email.id,
+                                    company_name=interview_info.get("company_name"),
+                                    position=interview_info.get("position"),
+                                    interview_time=interview_info.get("interview_time"),
+                                    interview_location=interview_info.get("interview_location"),
+                                    interview_type=interview_info.get("interview_type"),
+                                    interviewer_name=interview_info.get("interviewer_name"),
+                                    interviewer_email=interview_info.get("interviewer_email"),
+                                    additional_info=interview_info.get("additional_info"),
+                                    confidence_score=interview_info.get("confidence_score", 0)
+                                )
+                                db.add(invitation)
+                    except Exception as extract_error:
+                        logger.error(f"提取面試資訊失敗 email_id={email.id}: {extract_error}")
+                
+            except Exception as email_error:
+                logger.error(f"分析郵件失敗 email_id={email.id}: {email_error}")
+                continue
+        
+        # 提交所有變更
+        db.commit()
+        
+        return {
+            "success": True,
+            "message": f"批量分析完成",
+            "analyzed_count": analyzed_count,
+            "interview_count": interview_count,
+            "total_emails": len(emails)
+        }
+        
+    except Exception as e:
+        db.rollback()
+        return JSONResponse({
+            "success": False,
+            "error": "batch_analysis_failed",
+            "message": str(e)
+        }, status_code=500)
+    
 if __name__ == "__main__":
     print("Starting Interview Assistant API...")
     print("Test URLs:")

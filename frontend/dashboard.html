@@ -101,6 +101,7 @@
             gap: 1rem;
             justify-content: center;
             flex-wrap: wrap;
+            margin-bottom: 2rem;
         }
 
         .btn {
@@ -130,11 +131,214 @@
             background: #5a6268;
         }
 
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #218838;
+        }
+
         .loading {
             display: none;
             text-align: center;
             padding: 2rem;
             color: #666;
+        }
+
+        /* 新增郵件列表樣式 */
+        .email-section {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+            display: none;
+        }
+
+        .email-section.active {
+            display: block;
+        }
+
+        .email-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .email-list {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        .email-item {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid #f0f0f0;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .email-item:hover {
+            background: #f8f9fa;
+        }
+
+        .email-item.interview {
+            border-left: 4px solid #4285f4;
+        }
+
+        .email-subject {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: #333;
+        }
+
+        .email-meta {
+            font-size: 0.9rem;
+            color: #666;
+            margin-bottom: 0.5rem;
+        }
+
+        .email-preview {
+            font-size: 0.9rem;
+            color: #888;
+        }
+
+        .email-actions {
+            margin-top: 0.5rem;
+            display: none;
+        }
+
+        .email-item:hover .email-actions {
+            display: block;
+        }
+
+        .email-actions button {
+            font-size: 0.8rem;
+            padding: 4px 8px;
+            margin-right: 0.5rem;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .analyze-btn {
+            background: #17a2b8;
+            color: white;
+        }
+
+        .reply-btn {
+            background: #28a745;
+            color: white;
+        }
+
+        /* 模態框樣式 */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+        }
+
+        .modal-content {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            border-radius: 8px;
+            padding: 2rem;
+            max-width: 600px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid #eee;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+        }
+
+        .form-group input,
+        .form-group textarea,
+        .form-group select {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 0.9rem;
+        }
+
+        .form-group textarea {
+            min-height: 200px;
+            resize: vertical;
+        }
+
+        .interview-info {
+            background: #f8f9fa;
+            padding: 1rem;
+            border-radius: 6px;
+            margin: 1rem 0;
+        }
+
+        .interview-info h4 {
+            margin-bottom: 0.5rem;
+            color: #333;
+        }
+
+        .info-item {
+            margin: 0.25rem 0;
+            font-size: 0.9rem;
+        }
+
+        .alert {
+            padding: 1rem;
+            border-radius: 6px;
+            margin-bottom: 1rem;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .alert-info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
         }
     </style>
 </head>
@@ -176,12 +380,26 @@
             <button class="btn btn-primary" onclick="syncEmails()">
                 同步 Gmail 郵件
             </button>
-            <button class="btn btn-secondary" onclick="viewEmails()">
+            <button class="btn btn-secondary" onclick="toggleEmailList()">
                 查看郵件列表
+            </button>
+            <button class="btn btn-success" onclick="analyzeAllEmails()">
+                AI 分析所有郵件
             </button>
             <button class="btn btn-secondary" onclick="testConnection()">
                 測試連接
             </button>
+        </div>
+
+        <!-- 郵件列表區域 -->
+        <div class="email-section" id="emailSection">
+            <div class="email-header">
+                <h2>📧 郵件列表</h2>
+                <button class="btn btn-secondary" onclick="toggleEmailList()">隱藏</button>
+            </div>
+            <div class="email-list" id="emailList">
+                <div class="loading" style="display: block;">載入郵件中...</div>
+            </div>
         </div>
 
         <div class="loading" id="loading">
@@ -189,9 +407,54 @@
         </div>
     </div>
 
+    <!-- 面試資訊模態框 -->
+    <div id="interviewModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>面試資訊</h2>
+                <button class="modal-close" onclick="closeModal('interviewModal')">&times;</button>
+            </div>
+            <div id="interviewInfo"></div>
+        </div>
+    </div>
+
+    <!-- 回信模態框 -->
+    <div id="replyModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>生成回信</h2>
+                <button class="modal-close" onclick="closeModal('replyModal')">&times;</button>
+            </div>
+            <div id="replyContent">
+                <div class="form-group">
+                    <label>回信語調</label>
+                    <select id="replyTone">
+                        <option value="professional">專業</option>
+                        <option value="friendly">友善</option>
+                        <option value="formal">正式</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>主旨</label>
+                    <input type="text" id="replySubject" readonly>
+                </div>
+                <div class="form-group">
+                    <label>回信內容</label>
+                    <textarea id="replyBody" placeholder="點擊生成回信按鈕"></textarea>
+                </div>
+                <div style="display: flex; gap: 1rem;">
+                    <button class="btn btn-primary" onclick="generateReply()">生成回信</button>
+                    <button class="btn btn-success" onclick="sendReply()" style="display: none;" id="sendBtn">發送回信</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
         const API_BASE = 'http://localhost:8000';
         let currentUserId = null;
+        let currentEmailId = null;
+        let emails = [];
 
         // 頁面載入時執行
         window.addEventListener('load', () => {
@@ -209,20 +472,15 @@
                 localStorage.setItem('userId', userId);
                 localStorage.setItem('isLoggedIn', 'true');
                 
-                // 顯示成功訊息
                 document.getElementById('successMessage').style.display = 'block';
-                
-                // 清理 URL 參數
                 window.history.replaceState({}, document.title, window.location.pathname);
             } else {
-                // 檢查本地存儲
                 const storedUserId = localStorage.getItem('userId');
                 const isLoggedIn = localStorage.getItem('isLoggedIn');
                 
                 if (isLoggedIn === 'true' && storedUserId) {
                     currentUserId = storedUserId;
                 } else {
-                    // 未登入，重定向到登入頁面
                     window.location.href = 'login.html';
                     return;
                 }
@@ -233,14 +491,12 @@
             if (!currentUserId) return;
             
             try {
-                // 獲取用戶資訊
                 const userResponse = await fetch(`${API_BASE}/users/${currentUserId}`);
                 if (userResponse.ok) {
                     const userData = await userResponse.json();
                     document.getElementById('userEmail').textContent = userData.user.email;
                 }
 
-                // 獲取 Gmail 狀態
                 const statusResponse = await fetch(`${API_BASE}/gmail-status/${currentUserId}`);
                 if (statusResponse.ok) {
                     const statusData = await statusResponse.json();
@@ -266,22 +522,211 @@
                 
                 if (response.ok) {
                     const data = await response.json();
-                    alert(`同步完成！同步了 ${data.synced_count} 封郵件`);
-                    loadUserStats(); // 重新載入統計
+                    showAlert('success', `同步完成！同步了 ${data.synced_count} 封郵件`);
+                    loadUserStats();
+                    if (document.getElementById('emailSection').classList.contains('active')) {
+                        loadEmailList();
+                    }
                 } else {
-                    alert('同步失敗，請稍後再試');
+                    showAlert('error', '同步失敗，請稍後再試');
                 }
             } catch (error) {
-                alert('同步失敗：' + error.message);
+                showAlert('error', '同步失敗：' + error.message);
             } finally {
                 loading.style.display = 'none';
             }
         }
 
-        function viewEmails() {
+        async function toggleEmailList() {
+            const emailSection = document.getElementById('emailSection');
+            
+            if (emailSection.classList.contains('active')) {
+                emailSection.classList.remove('active');
+            } else {
+                emailSection.classList.add('active');
+                await loadEmailList();
+            }
+        }
+
+        async function loadEmailList() {
             if (!currentUserId) return;
-            // 這個功能稍後實作
-            alert('郵件列表功能即將推出！');
+            
+            const emailList = document.getElementById('emailList');
+            emailList.innerHTML = '<div class="loading" style="display: block;">載入郵件中...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE}/emails/${currentUserId}?limit=20`);
+                const data = await response.json();
+                
+                if (data.success && data.emails.length > 0) {
+                    emails = data.emails;
+                    renderEmailList();
+                } else {
+                    emailList.innerHTML = '<div style="padding: 2rem; text-align: center; color: #666;">暫無郵件資料，請先同步郵件</div>';
+                }
+            } catch (error) {
+                emailList.innerHTML = '<div style="padding: 2rem; text-align: center; color: #dc3545;">載入郵件失敗</div>';
+            }
+        }
+
+        function renderEmailList() {
+            const emailList = document.getElementById('emailList');
+            
+            emailList.innerHTML = emails.map(email => `
+                <div class="email-item ${email.is_interview_related ? 'interview' : ''}" onclick="selectEmail(${email.id})">
+                    <div class="email-subject">${email.subject || '(無主旨)'}</div>
+                    <div class="email-meta">
+                        從: ${email.sender} | ${new Date(email.received_at).toLocaleString('zh-TW')}
+                        ${email.is_interview_related ? ' | 🎯 面試邀請' : ''}
+                    </div>
+                    <div class="email-preview">${email.body_preview || ''}</div>
+                    <div class="email-actions">
+                        <button class="analyze-btn" onclick="event.stopPropagation(); analyzeEmail(${email.id})">AI 分析</button>
+                        ${email.is_interview_related ? `<button class="reply-btn" onclick="event.stopPropagation(); showReplyModal(${email.id})">生成回信</button>` : ''}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function selectEmail(emailId) {
+            currentEmailId = emailId;
+            console.log('選擇郵件 ID:', emailId);
+        }
+
+        async function analyzeEmail(emailId) {
+            const loading = document.getElementById('loading');
+            loading.style.display = 'block';
+            
+            try {
+                // 先分析郵件
+                const analyzeResponse = await fetch(`${API_BASE}/analyze-email/${emailId}`, {
+                    method: 'POST'
+                });
+                const analyzeData = await analyzeResponse.json();
+                
+                if (analyzeData.success) {
+                    // 如果是面試邀請，提取資訊
+                    if (analyzeData.is_interview) {
+                        const extractResponse = await fetch(`${API_BASE}/extract-info/${emailId}`, {
+                            method: 'POST'
+                        });
+                        const extractData = await extractResponse.json();
+                        
+                        if (extractData.success) {
+                            showInterviewInfo(extractData.extracted_info);
+                        }
+                    }
+                    
+                    showAlert('success', `分析完成 - ${analyzeData.is_interview ? '這是面試邀請' : '這不是面試邀請'} (信心度: ${analyzeData.confidence}%)`);
+                    loadEmailList(); // 重新載入列表以更新標記
+                } else {
+                    showAlert('error', '分析失敗：' + analyzeData.message);
+                }
+            } catch (error) {
+                showAlert('error', '分析失敗：' + error.message);
+            } finally {
+                loading.style.display = 'none';
+            }
+        }
+
+        function showInterviewInfo(info) {
+            const interviewInfo = document.getElementById('interviewInfo');
+            interviewInfo.innerHTML = `
+                <div class="interview-info">
+                    <h4>📋 面試詳情</h4>
+                    <div class="info-item"><strong>公司:</strong> ${info.company_name || '未知'}</div>
+                    <div class="info-item"><strong>職位:</strong> ${info.position || '未知'}</div>
+                    <div class="info-item"><strong>日期:</strong> ${info.interview_date || '未知'}</div>
+                    <div class="info-item"><strong>時間:</strong> ${info.interview_time || '未知'}</div>
+                    <div class="info-item"><strong>地點:</strong> ${info.interview_location || '未知'}</div>
+                    <div class="info-item"><strong>類型:</strong> ${info.interview_type || '未知'}</div>
+                    <div class="info-item"><strong>面試官:</strong> ${info.interviewer_name || '未知'}</div>
+                    <div class="info-item"><strong>信心度:</strong> ${info.confidence_score || 0}%</div>
+                </div>
+                <div style="margin-top: 1rem;">
+                    <button class="btn btn-success" onclick="closeModal('interviewModal'); showReplyModal(${currentEmailId})">生成回信</button>
+                </div>
+            `;
+            document.getElementById('interviewModal').style.display = 'block';
+        }
+
+        async function showReplyModal(emailId) {
+            currentEmailId = emailId;
+            document.getElementById('replySubject').value = '';
+            document.getElementById('replyBody').value = '';
+            document.getElementById('sendBtn').style.display = 'none';
+            document.getElementById('replyModal').style.display = 'block';
+        }
+
+        async function generateReply() {
+            if (!currentEmailId) return;
+            
+            const tone = document.getElementById('replyTone').value;
+            const loading = document.getElementById('loading');
+            loading.style.display = 'block';
+            
+            try {
+                const response = await fetch(`${API_BASE}/generate-reply/${currentEmailId}?tone=${tone}`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    document.getElementById('replySubject').value = data.subject;
+                    document.getElementById('replyBody').value = data.body;
+                    document.getElementById('sendBtn').style.display = 'inline-block';
+                    showAlert('success', '回信生成成功！');
+                } else {
+                    showAlert('error', '生成失敗：' + data.message);
+                }
+            } catch (error) {
+                showAlert('error', '生成失敗：' + error.message);
+            } finally {
+                loading.style.display = 'none';
+            }
+        }
+
+        async function sendReply() {
+            showAlert('info', '發送功能開發中...');
+        }
+
+        async function analyzeAllEmails() {
+            if (!currentUserId) return;
+            
+            const loading = document.getElementById('loading');
+            loading.style.display = 'block';
+            
+            try {
+                showAlert('info', '開始批量分析郵件...');
+                
+                // 先載入所有郵件
+                const response = await fetch(`${API_BASE}/emails/${currentUserId}?limit=50`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    let analyzed = 0;
+                    for (let email of data.emails) {
+                        try {
+                            await fetch(`${API_BASE}/analyze-email/${email.id}`, { method: 'POST' });
+                            analyzed++;
+                        } catch (e) {
+                            console.error(`分析郵件 ${email.id} 失敗:`, e);
+                        }
+                    }
+                    
+                    showAlert('success', `批量分析完成！已分析 ${analyzed} 封郵件`);
+                    loadUserStats();
+                    if (document.getElementById('emailSection').classList.contains('active')) {
+                        loadEmailList();
+                    }
+                } else {
+                    showAlert('error', '無法載入郵件列表');
+                }
+            } catch (error) {
+                showAlert('error', '批量分析失敗：' + error.message);
+            } finally {
+                loading.style.display = 'none';
+            }
         }
 
         async function testConnection() {
@@ -290,13 +735,34 @@
                 const data = await response.json();
                 
                 if (data.success) {
-                    alert(`連接成功！\n用戶數: ${data.stats.users}\n郵件數: ${data.stats.emails}`);
+                    showAlert('success', `連接成功！用戶數: ${data.stats.users}，郵件數: ${data.stats.emails}`);
                 } else {
-                    alert('連接失敗');
+                    showAlert('error', '連接失敗');
                 }
             } catch (error) {
-                alert('測試失敗：' + error.message);
+                showAlert('error', '測試失敗：' + error.message);
             }
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
+        }
+
+        function showAlert(type, message) {
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${type}`;
+            alertDiv.textContent = message;
+            alertDiv.style.position = 'fixed';
+            alertDiv.style.top = '20px';
+            alertDiv.style.right = '20px';
+            alertDiv.style.zIndex = '9999';
+            alertDiv.style.maxWidth = '400px';
+            
+            document.body.appendChild(alertDiv);
+            
+            setTimeout(() => {
+                alertDiv.remove();
+            }, 5000);
         }
 
         function logout() {
@@ -304,6 +770,13 @@
             localStorage.removeItem('isLoggedIn');
             window.location.href = 'login.html';
         }
+
+        // 點擊模態框外部關閉
+        window.onclick = function(event) {
+            if (event.target.classList.contains('modal')) {
+                event.target.style.display = 'none';
+            }
+        };
     </script>
 </body>
 </html>
