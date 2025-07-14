@@ -492,12 +492,26 @@
             
             try {
                 const userResponse = await fetch(`${API_BASE}/users/${currentUserId}`);
+                if (userResponse.status === 404) {
+                    // 用戶不存在，清除 localStorage 並重定向到登入
+                    localStorage.clear();
+                    window.location.href = 'login.html';
+                    return;
+                }
+                
                 if (userResponse.ok) {
                     const userData = await userResponse.json();
                     document.getElementById('userEmail').textContent = userData.user.email;
                 }
 
                 const statusResponse = await fetch(`${API_BASE}/gmail-status/${currentUserId}`);
+                if (statusResponse.status === 404) {
+                    // 用戶不存在，清除 localStorage 並重定向到登入
+                    localStorage.clear();
+                    window.location.href = 'login.html';
+                    return;
+                }
+                
                 if (statusResponse.ok) {
                     const statusData = await statusResponse.json();
                     document.getElementById('totalEmails').textContent = statusData.stats.total_emails;
@@ -506,6 +520,11 @@
                 }
             } catch (error) {
                 console.error('載入統計資料失敗:', error);
+                // 如果是網路錯誤，也檢查是否需要重新登入
+                if (error.message.includes('404')) {
+                    localStorage.clear();
+                    window.location.href = 'login.html';
+                }
             }
         }
 
