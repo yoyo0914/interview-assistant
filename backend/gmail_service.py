@@ -221,11 +221,37 @@ class GmailService:
             db.close()
     
     def sync_recent_emails(self, max_results: int = 50):
-        """同步最近的郵件到資料庫"""
+        """增量同步郵件到資料庫"""
+        db = get_db_session()
         try:
-            messages = self.get_messages(max_results=max_results)
+            # 取得用戶最後同步時間
+            user = db.query(User).filter(User.id == self.user_id).first()
+            if not user:
+                raise ValueError(f"User {self.user_id} not found")
+            
+            # 建構查詢條件
+            if user.last_sync_at:
+                # 增量同步：只取上次同步後的郵件
+                after_date = user.last_sync_at.strftime('%Y/%m/%d')
+                query = f"after:{after_date}"
+                logger.info(f"增量同步：查詢 {after_date} 之後的郵件")
+            else:
+                # 首次同步：只取最近7天
+                query = "newer_than:7d"
+                logger.info("首次同步：查詢最近7天的郵件")
+            
+            # 取得郵件列表
+            messages = self.get_messages(query=query, max_results=max_results)
             saved_count = 0
             
+            if not messages:
+                logger.info("沒有新郵件需要同步")
+                # 更新同步時間即使沒有新郵件
+                user.last_sync_at = datetime.utcnow()
+                db.commit()
+                return 0
+            
+            # 處理郵件
             for msg in messages:
                 message_details = self.get_message_details(msg['id'])
                 if message_details:
@@ -233,12 +259,19 @@ class GmailService:
                     if saved_email:
                         saved_count += 1
             
-            logger.info(f"Synced {saved_count}/{len(messages)} emails")
+            # 更新用戶同步時間
+            user.last_sync_at = datetime.utcnow()
+            db.commit()
+            
+            logger.info(f"增量同步完成：新增 {saved_count}/{len(messages)} 封郵件")
             return saved_count
             
         except Exception as e:
             logger.error(f"Failed to sync emails: {e}")
+            db.rollback()
             return 0
+        finally:
+            db.close()
     
     def send_email(self, to: str, subject: str, body: str):
         """發送郵件"""

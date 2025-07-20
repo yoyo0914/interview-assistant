@@ -23,6 +23,9 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
+    # 新增：同步狀態追蹤
+    last_sync_at = Column(DateTime)
+    
     emails = relationship("Email", back_populates="user")
 
 class Email(Base):

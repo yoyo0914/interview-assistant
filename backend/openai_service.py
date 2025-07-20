@@ -54,11 +54,11 @@ Analyze if the following email is an interview invitation.
 Subject: {subject}
 Content: {body[:1500]}
 
-Respond in JSON format:
+You must respond with EXACTLY this JSON format (no extra text):
 {{
-    "is_interview": true/false,
-    "confidence": confidence score 0-100,
-    "reason": "reason for judgment"
+    "is_interview": true or false,
+    "confidence": number between 0-100,
+    "reason": "brief explanation"
 }}
 
 Criteria:
@@ -71,17 +71,40 @@ Criteria:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "You are a professional email analysis expert specializing in identifying interview invitations."},
+                    {"role": "system", "content": "You are a professional email analysis expert. Always respond with valid JSON only."},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.1
             )
             
-            result = json.loads(response.choices[0].message.content)
-            return result["is_interview"], result["confidence"]
+            content = response.choices[0].message.content.strip()
+            logger.info(f"OpenAI raw response: {content}")
+            
+            # 嘗試解析 JSON
+            try:
+                result = json.loads(content)
+                return result["is_interview"], result["confidence"]
+            except json.JSONDecodeError:
+                # 如果 JSON 解析失敗，嘗試提取關鍵字
+                logger.warning(f"JSON parse failed, using fallback: {content}")
+                
+                # 簡單的關鍵字檢測作為備用
+                text_to_check = (subject + " " + body).lower()
+                interview_keywords = ["interview", "面試", "面談", "會面", "meeting", "討論", "chat", "talk"]
+                
+                found_keywords = [kw for kw in interview_keywords if kw in text_to_check]
+                if found_keywords:
+                    return True, 70.0
+                else:
+                    return False, 30.0
             
         except Exception as e:
             logger.error(f"Failed to analyze email: {e}")
+            # 備用檢測邏輯
+            text_to_check = (subject + " " + body).lower()
+            interview_keywords = ["interview", "面試", "面談", "會面"]
+            if any(kw in text_to_check for kw in interview_keywords):
+                return True, 60.0
             return False, 0
     
     def extract_interview_info(self, subject: str, body: str) -> Optional[Dict]:
@@ -93,34 +116,53 @@ Extract detailed information from the following interview invitation email.
 Subject: {subject}
 Content: {body}
 
-Respond in JSON format with the following information:
+You must respond with EXACTLY this JSON format (no extra text):
 {{
-    "company_name": "company name",
-    "position": "job position", 
-    "interview_date": "interview date (YYYY-MM-DD format if available)",
-    "interview_time": "interview time",
-    "interview_location": "interview location (online/physical address)",
-    "interview_type": "one of: online/onsite/phone",
-    "interviewer_name": "interviewer name",
-    "interviewer_email": "interviewer email",
-    "additional_info": "other important information",
-    "confidence_score": "extraction confidence score 0-100"
+    "company_name": "company name or null",
+    "position": "job position or null", 
+    "interview_date": "interview date in YYYY-MM-DD format or null",
+    "interview_time": "interview time or null",
+    "interview_location": "interview location or null",
+    "interview_type": "online or onsite or phone or null",
+    "interviewer_name": "interviewer name or null",
+    "interviewer_email": "interviewer email or null",
+    "additional_info": "other important information or null",
+    "confidence_score": number between 0-100
 }}
 
-If any information is not mentioned, fill with null.
+Important: Use null (not "null" string) for missing information.
 """
 
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "You are a professional information extraction expert specializing in extracting structured information from interview invitations."},
+                    {"role": "system", "content": "You are a professional information extraction expert. Always respond with valid JSON only."},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.1
             )
             
-            result = json.loads(response.choices[0].message.content)
-            return result
+            content = response.choices[0].message.content.strip()
+            logger.info(f"OpenAI extract response: {content}")
+            
+            try:
+                result = json.loads(content)
+                return result
+            except json.JSONDecodeError:
+                logger.warning(f"JSON parse failed for extraction: {content}")
+                # 返回基本結構
+                return {
+                    "company_name": None,
+                    "position": None,
+                    "interview_date": None,
+                    "interview_time": None,
+                    "interview_location": None,
+                    "interview_type": None,
+                    "interviewer_name": None,
+                    "interviewer_email": None,
+                    "additional_info": None,
+                    "confidence_score": 50
+                }
             
         except Exception as e:
             logger.error(f"Failed to extract interview info: {e}")

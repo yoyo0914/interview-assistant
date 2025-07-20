@@ -374,6 +374,10 @@
                 <div class="stat-number" id="gmailStatus">-</div>
                 <div class="stat-label">Gmail 狀態</div>
             </div>
+            <div class="stat-card sync-status-card">
+                <div class="stat-number" id="syncStatus">-</div>
+                <div class="stat-label" id="syncLabel">同步狀態</div>
+            </div>
         </div>
 
         <div class="action-buttons">
@@ -517,6 +521,19 @@
                     document.getElementById('totalEmails').textContent = statusData.stats.total_emails;
                     document.getElementById('interviewEmails').textContent = statusData.stats.interview_emails;
                     document.getElementById('gmailStatus').textContent = statusData.gmail_connected ? '已連接' : '未連接';
+                    
+                    // 顯示同步狀態
+                    if (statusData.sync_info) {
+                        const syncInfo = statusData.sync_info;
+                        if (syncInfo.need_initial_sync) {
+                            document.getElementById('syncStatus').textContent = '未同步';
+                            document.getElementById('syncLabel').innerHTML = '同步狀態<br><small>需要首次同步</small>';
+                        } else {
+                            const lastSync = new Date(syncInfo.last_sync_at).toLocaleString('zh-TW');
+                            document.getElementById('syncStatus').textContent = '已同步';
+                            document.getElementById('syncLabel').innerHTML = `同步狀態<br><small>最後: ${lastSync}</small>`;
+                        }
+                    }
                 }
             } catch (error) {
                 console.error('載入統計資料失敗:', error);
@@ -541,7 +558,7 @@
                 
                 if (response.ok) {
                     const data = await response.json();
-                    showAlert('success', `同步完成！同步了 ${data.synced_count} 封郵件`);
+                    showAlert('success', data.message || `同步完成！同步了 ${data.synced_count} 封郵件`);
                     loadUserStats();
                     if (document.getElementById('emailSection').classList.contains('active')) {
                         loadEmailList();
@@ -601,7 +618,7 @@
                     <div class="email-preview">${email.body_preview || ''}</div>
                     <div class="email-actions">
                         <button class="analyze-btn" onclick="event.stopPropagation(); analyzeEmail(${email.id})">AI 分析</button>
-                        ${email.is_interview_related ? `<button class="reply-btn" onclick="event.stopPropagation(); showReplyModal(${email.id})">生成回信</button>` : ''}
+                        <button class="reply-btn" onclick="event.stopPropagation(); showReplyModal(${email.id})">生成回信</button>
                     </div>
                 </div>
             `).join('');
@@ -694,9 +711,18 @@
                     document.getElementById('replySubject').value = data.subject;
                     document.getElementById('replyBody').value = data.body;
                     document.getElementById('sendBtn').style.display = 'inline-block';
-                    showAlert('success', '回信生成成功！');
+                    const autoMsg = data.auto_extracted ? '（已自動分析面試資訊）' : '';
+                    showAlert('success', `回信生成成功！${autoMsg}`);
                 } else {
-                    showAlert('error', '生成失敗：' + data.message);
+                    let errorMsg = '生成失敗';
+                    if (data.error === 'not_interview') {
+                        errorMsg = '這不是面試邀請郵件，無法生成回信';
+                    } else if (data.error === 'extraction_failed') {
+                        errorMsg = '無法提取面試資訊，請先手動分析郵件';
+                    } else if (data.message) {
+                        errorMsg = data.message;
+                    }
+                    showAlert('error', errorMsg);
                 }
             } catch (error) {
                 showAlert('error', '生成失敗：' + error.message);
