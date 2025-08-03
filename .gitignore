@@ -1,0 +1,14 @@
+#檔案
+*Zone.Identifier   
+.env
+.db
+#資料夾
+learn/
+venv/
+mysql/
+__pycache__/
+data/
+
+key.txt
+*dbkey.json
+*.json

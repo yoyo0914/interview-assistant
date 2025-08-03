@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interview Assistant - 登入</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .login-container {
+            background: white;
+            padding: 3rem;
+            border-radius: 16px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            max-width: 400px;
+            width: 90%;
+        }
+
+        .logo {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 1rem;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 2.5rem;
+            font-size: 1.1rem;
+        }
+
+        .google-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            background: #4285f4;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            min-width: 200px;
+        }
+
+        .google-btn:hover {
+            background: #3367d6;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(66, 133, 244, 0.3);
+        }
+
+        .google-btn:active {
+            transform: translateY(0);
+        }
+
+        .google-icon {
+            width: 20px;
+            height: 20px;
+            background: white;
+            border-radius: 2px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .features {
+            margin-top: 2rem;
+            padding-top: 2rem;
+            border-top: 1px solid #eee;
+        }
+
+        .feature-list {
+            list-style: none;
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .feature-list li {
+            margin: 0.5rem 0;
+            padding-left: 1.5rem;
+            position: relative;
+        }
+
+        .feature-list li::before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #4285f4;
+            font-weight: bold;
+        }
+
+        .loading {
+            display: none;
+            margin-top: 1rem;
+            color: #666;
+        }
+
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 12px;
+            border-radius: 8px;
+            margin-top: 1rem;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="logo">📧 Interview Assistant</div>
+        <div class="subtitle">自動處理面試邀請，智能生成回信</div>
+        
+        <button class="google-btn" onclick="handleGoogleLogin()">
+            <div class="google-icon">G</div>
+            使用 Google 帳號登入
+        </button>
+        
+        <div class="loading" id="loading">
+            正在連接 Google...
+        </div>
+        
+        <div class="error" id="error">
+            登入失敗，請稍後再試
+        </div>
+        
+        <div class="features">
+            <ul class="feature-list">
+                <li>自動同步 Gmail 郵件</li>
+                <li>AI 識別面試邀請</li>
+                <li>智能生成回信草稿</li>
+                <li>安全可靠的 Google 認證</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        function handleGoogleLogin() {
+            // 直接跳轉到後端，避免 CORS 問題
+            window.location.href = '/login';
+        }
+        
+        // 檢查 URL 參數，處理登入回調
+        function checkAuthCallback() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const success = urlParams.get('success');
+            const error = urlParams.get('error');
+            
+            if (success === 'true') {
+                // 登入成功，跳轉到 dashboard
+                localStorage.setItem('isLoggedIn', 'true');
+                window.location.href = '/static/dashboard.html';
+            } else if (error) {
+                // 顯示錯誤訊息
+                const errorEl = document.getElementById('error');
+                errorEl.textContent = `登入失敗: ${error}`;
+                errorEl.style.display = 'block';
+            }
+        }
+        
+        // 檢查是否已經登入
+        function checkLoginStatus() {
+            const isLoggedIn = localStorage.getItem('isLoggedIn');
+            if (isLoggedIn === 'true') {
+                window.location.href = '/static/dashboard.html';
+            }
+        }
+        
+        // 頁面載入時執行檢查
+        window.addEventListener('load', () => {
+            checkLoginStatus();
+            checkAuthCallback();
+        });
+    </script>
+</body>
+</html>
