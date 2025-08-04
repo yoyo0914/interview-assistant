@@ -1,5 +1,4 @@
 from sqlalchemy import (
-    create_engine,
     Column,
     Integer,
     String,
@@ -9,17 +8,10 @@ from sqlalchemy import (
     ForeignKey,
 )
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, relationship
+from sqlalchemy.orm import relationship
 from datetime import datetime
-import os
 
-# Database setup
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./interview_assistant.db")
-engine = create_engine(
-    DATABASE_URL,
-    connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {},
-)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+# 只保留Base定義，移除資料庫引擎設定
 Base = declarative_base()
 
 
@@ -101,17 +93,3 @@ class DraftReply(Base):
     interview_invitation = relationship(
         "InterviewInvitation", back_populates="draft_replies"
     )
-
-
-# Create tables
-def create_tables():
-    Base.metadata.create_all(bind=engine)
-
-
-# Database dependency
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
