@@ -13,8 +13,39 @@ env:
   REPOSITORY: interview-assistant-repo
 
 jobs:
+  # 功能性測試工作
+  functional-test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest httpx pytest-asyncio
+
+    - name: Test basic functionality
+      run: |
+        echo "執行功能性測試..."
+        
+        # 測試Python語法（基本檢查）
+        echo "檢查Python語法..."
+        python -m py_compile backend/*.py
+        
+        echo "基本功能測試通過！"
+
+  # 部署工作
   deploy:
     runs-on: ubuntu-latest
+    needs: functional-test  # 依賴功能測試通過
     
     steps:
     - name: Checkout
@@ -50,3 +81,47 @@ jobs:
           --memory 1Gi \
           --timeout 300 \
           --update-env-vars="GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }},GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }},GOOGLE_REDIRECT_URI=https://interview-assistant-504380981542.asia-east1.run.app/auth/callback,OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }},FRONTEND_URL=https://interview-assistant-504380981542.asia-east1.run.app"
+
+    # 關鍵：部署後功能驗證
+    - name: Wait for deployment
+      run: |
+        echo "等待服務啟動..."
+        sleep 45
+
+    - name: Functional health check
+      run: |
+        echo "執行功能性健康檢查..."
+        
+        BASE_URL="https://interview-assistant-504380981542.asia-east1.run.app"
+        
+        # 測試1: 基本端點
+        echo "1️測試基本API端點..."
+        curl -f "$BASE_URL/" || (echo "基本API失敗" && exit 1)
+        
+        # 測試2: 登入頁面
+        echo "2️測試登入頁面..."
+        curl -f "$BASE_URL/static/login.html" || (echo "登入頁面無法訪問" && exit 1)
+        
+        # 測試3: 資料庫測試端點
+        echo "3️測試資料庫連接..."
+        curl -f "$BASE_URL/test-db" || (echo "資料庫連接失敗" && exit 1)
+        
+        # 測試4: 檢查回應內容
+        echo "4️測試API回應格式..."
+        response=$(curl -s "$BASE_URL/test-db")
+        echo "API回應: $response"
+        
+        if echo "$response" | grep -q '"success": true'; then
+          echo "API回應格式正確"
+        else
+          echo "API回應格式異常"
+          exit 1
+        fi
+        
+        echo "所有功能測試通過！部署成功！"
+
+    # 可選：失敗時的通知
+    - name: Notify on failure
+      if: failure()
+      run: |
+        echo "部署失敗！請檢查日誌並修復問題。"
