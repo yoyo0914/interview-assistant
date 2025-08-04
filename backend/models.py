@@ -1,4 +1,5 @@
 from sqlalchemy import (
+    create_engine,
     Column,
     Integer,
     String,
@@ -8,10 +9,40 @@ from sqlalchemy import (
     ForeignKey,
 )
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import sessionmaker, relationship
+from sqlalchemy.pool import StaticPool
 from datetime import datetime
+import os
 
-# 只保留Base定義，移除資料庫引擎設定
+# Database setup with corrected connection pool settings
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./interview_assistant.db")
+
+# 🔧 修復：正確的SQLite連線池設定
+if "sqlite" in DATABASE_URL:
+    engine = create_engine(
+        DATABASE_URL,
+        connect_args={
+            "check_same_thread": False,
+            "timeout": 20
+        },
+        poolclass=StaticPool,  # SQLite 使用靜態連線池
+        # ❌ SQLite + StaticPool 不支援 pool_size 和 max_overflow
+        pool_pre_ping=True,    # 檢查連線有效性
+        echo=False
+    )
+else:
+    # PostgreSQL 等其他資料庫才使用這些參數
+    engine = create_engine(
+        DATABASE_URL,
+        pool_size=2,           
+        max_overflow=1,        
+        pool_timeout=20,       
+        pool_pre_ping=True,    
+        pool_recycle=1800,     
+        echo=False
+    )
+
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 
@@ -93,3 +124,20 @@ class DraftReply(Base):
     interview_invitation = relationship(
         "InterviewInvitation", back_populates="draft_replies"
     )
+
+
+# Create tables
+def create_tables():
+    Base.metadata.create_all(bind=engine)
+
+
+# 🔧 修復：改善資料庫依賴注入，確保連線正確關閉
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    except Exception as e:
+        db.rollback()
+        raise
+    finally:
+        db.close()
