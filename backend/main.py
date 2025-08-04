@@ -9,9 +9,9 @@ import urllib.parse
 from datetime import datetime, timedelta, timezone
 from config import config
 
-# 🔧 修復：先導入database，再導入models
-from database import create_tables, get_db, init_database
+# 🔧 修復：先導入models定義，再導入database功能
 from models import User, Email, InterviewInvitation, DraftReply
+from database import get_db, init_database
 
 from gmail_service import get_gmail_service
 from openai_service import get_openai_service

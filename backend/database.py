@@ -76,9 +76,9 @@ def upgrade_database():
 def create_tables():
     """創建資料庫表格"""
     try:
-        # 🔧 修復：從models模組導入Base
-        from models import Base
-        Base.metadata.create_all(bind=engine)
+        # 🔧 修復：延遲導入避免循環依賴
+        import models
+        models.Base.metadata.create_all(bind=engine)
         logger.info("Database tables created successfully")
     except Exception as e:
         logger.error(f"Failed to create tables: {e}")
@@ -142,10 +142,10 @@ if __name__ == "__main__":
     print("Database setup complete")
     print(f"Database location: {DATABASE_URL}")
 
-    # 從models導入Base來顯示表格
-    from models import Base
+    # 延遲導入避免循環依賴
+    import models
     print("\nCreated tables:")
-    for table_name in Base.metadata.tables.keys():
+    for table_name in models.Base.metadata.tables.keys():
         print(f"  - {table_name}")
 
     print("\nDatabase ready for use")
