@@ -17,9 +17,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/ ./backend/
 COPY frontend/ ./frontend/
 
-# 注意：生產環境不使用 .env 文件
-# 所有環境變數透過 Cloud Run 設定
-
 # 建立資料庫目錄（用於持久化）
 RUN mkdir -p /app/data
 
