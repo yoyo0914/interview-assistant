@@ -8,11 +8,8 @@ import requests
 import urllib.parse
 from datetime import datetime, timedelta, timezone
 from config import config
-
-# 🔧 修復：先導入models定義，再導入database功能
 from models import User, Email, InterviewInvitation, DraftReply
-from database import get_db, init_database
-
+from database import create_tables, get_db
 from gmail_service import get_gmail_service
 from openai_service import get_openai_service
 from google.oauth2.credentials import Credentials
@@ -38,8 +35,8 @@ frontend_path = "/app/frontend"
 if os.path.exists(frontend_path):
     app.mount("/static", StaticFiles(directory=frontend_path), name="static")
 
-# 🔧 修復：使用新的初始化函數
-init_database()
+# 初始化資料庫
+create_tables()
 
 
 def create_oauth_url(scopes: list):
