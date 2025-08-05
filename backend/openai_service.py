@@ -50,7 +50,7 @@ Respond with only one word: "chinese" or "english"
             return "english"  # 預設英文
 
     def is_interview_email(self, subject: str, body: str) -> Tuple[bool, float]:
-        """判斷郵件是否為面試邀請（支援中英文）"""
+        """判斷郵件是否為面試邀請"""
         try:
             prompt = f"""
 Analyze if the following email is an interview invitation.
@@ -118,7 +118,6 @@ Criteria:
 
         except Exception as e:
             logger.error(f"Failed to analyze email: {e}")
-            # 備用檢測邏輯
             text_to_check = (subject + " " + body).lower()
             interview_keywords = ["interview", "面試", "面談", "會面"]
             if any(kw in text_to_check for kw in interview_keywords):
@@ -126,7 +125,7 @@ Criteria:
             return False, 0
 
     def extract_interview_info(self, subject: str, body: str) -> Optional[Dict]:
-        """從面試邀請中提取詳細資訊（支援中英文）"""
+        """從面試邀請中提取詳細資訊"""
         try:
             prompt = f"""
 Extract detailed information from the following interview invitation email.
@@ -192,7 +191,7 @@ Important: Use null (not "null" string) for missing information.
     def generate_reply(
         self, interview_info: Dict, tone: str = "professional", language: str = None
     ) -> Optional[str]:
-        """生成面試回信草稿（支援中英文）"""
+        """生成回信草稿"""
         try:
             # 如果沒指定語言，根據公司名稱判斷
             if not language:

@@ -354,11 +354,11 @@
     <div class="container">
         <div class="welcome-card">
             <div class="success-message" id="successMessage" style="display: none;">
-                ✅ 登入成功！歡迎使用 Interview Assistant
+                登入成功！歡迎回來！
             </div>
             
             <h1>歡迎使用 Interview Assistant</h1>
-            <p>自動處理 Gmail 中的面試邀請，使用 AI 生成專業回信</p>
+            <p>處理 Gmail 中的面試邀請，使用 AI 生成回信</p>
         </div>
 
         <div class="stats-grid">
@@ -398,7 +398,7 @@
         <!-- 郵件列表區域 -->
         <div class="email-section" id="emailSection">
             <div class="email-header">
-                <h2>📧 郵件列表</h2>
+                <h2>郵件列表</h2>
                 <button class="btn btn-secondary" onclick="toggleEmailList()">隱藏</button>
             </div>
             <div class="email-list" id="emailList">
@@ -669,7 +669,7 @@
             const interviewInfo = document.getElementById('interviewInfo');
             interviewInfo.innerHTML = `
                 <div class="interview-info">
-                    <h4>📋 面試詳情</h4>
+                    <h4>面試詳情</h4>
                     <div class="info-item"><strong>公司:</strong> ${info.company_name || '未知'}</div>
                     <div class="info-item"><strong>職位:</strong> ${info.position || '未知'}</div>
                     <div class="info-item"><strong>日期:</strong> ${info.interview_date || '未知'}</div>

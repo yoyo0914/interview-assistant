@@ -13,7 +13,7 @@ env:
   REPOSITORY: interview-assistant-repo
 
 jobs:
-  # 功能性測試工作
+  # 功能性測試
   functional-test:
     runs-on: ubuntu-latest
     
@@ -40,7 +40,7 @@ jobs:
         echo "檢查Python語法..."
         python -m py_compile backend/*.py
         
-        echo "基本功能測試通過！"
+        echo "基本功能測試通過"
 
   # 部署工作
   deploy:
@@ -82,7 +82,7 @@ jobs:
           --timeout 300 \
           --update-env-vars="GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }},GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }},GOOGLE_REDIRECT_URI=https://interview-assistant-504380981542.asia-east1.run.app/auth/callback,OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }},FRONTEND_URL=https://interview-assistant-504380981542.asia-east1.run.app"
 
-    # 關鍵：部署後功能驗證
+    # 部署後功能驗證
     - name: Wait for deployment
       run: |
         echo "等待服務啟動..."
@@ -121,8 +121,7 @@ jobs:
         
         echo "所有功能測試通過！部署成功！"
 
-    # 失敗時的通知
     - name: Notify on failure
       if: failure()
       run: |
-        echo "部署失敗！請檢查日誌並修復問題。"
+        echo "部署失敗"

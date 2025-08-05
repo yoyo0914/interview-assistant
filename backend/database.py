@@ -23,7 +23,7 @@ def upgrade_database():
         with engine.connect() as conn:
             # 檢查是否為 SQLite
             if "sqlite" in DATABASE_URL:
-                # 檢查 last_sync_at 欄位是否存在
+                # 檢查 last_sync_at 欄位是否存在(最後同步時間)
                 result = conn.execute(text("PRAGMA table_info(users)"))
                 columns = [row[1] for row in result.fetchall()]
 
@@ -77,7 +77,7 @@ def get_db_session() -> Session:
 def init_database():
     logger.info("Initializing database...")
     create_tables()
-    upgrade_database()  # 新增：升級資料庫結構
+    upgrade_database()  # 升級資料庫結構
 
     try:
         db = get_db_session()

@@ -337,7 +337,7 @@ async def generate_reply(
     if not email:
         raise HTTPException(status_code=404, detail="Email not found")
 
-    # 智能檢查：如果還沒有面試資訊，自動提取
+    # 如果還沒有面試資訊，自動提取
     invitation = (
         db.query(InterviewInvitation)
         .filter(InterviewInvitation.email_id == email_id)

@@ -20,7 +20,6 @@ class GmailService:
 
     def _setup_service(self):
         """設置 Gmail 服務"""
-        # 🔧 修復：確保資料庫連線正確關閉
         db = get_db_session()
         try:
             user = db.query(User).filter(User.id == self.user_id).first()
@@ -44,7 +43,7 @@ class GmailService:
             logger.error(f"Failed to setup Gmail service: {e}")
             raise
         finally:
-            # 🔧 修復：確保連線關閉
+            # 確保連線關閉
             db.close()
 
     def get_messages(self, query: str = "", max_results: int = 10):
@@ -187,7 +186,7 @@ class GmailService:
 
     def save_message_to_db(self, message_data):
         """將郵件儲存到資料庫"""
-        # 🔧 修復：確保資料庫連線正確關閉
+        # 確保資料庫連線正確關閉
         db = get_db_session()
         try:
             # 檢查是否已存在
@@ -222,17 +221,17 @@ class GmailService:
             return email_record
 
         except Exception as e:
-            # 🔧 修復：發生錯誤時回滾
+            # 發生錯誤時回滾
             db.rollback()
             logger.error(f"Failed to save message: {e}")
             return None
         finally:
-            # 🔧 修復：確保連線關閉
+            # 確保連線關閉
             db.close()
 
     def sync_recent_emails(self, max_results: int = 50):
         """增量同步郵件到資料庫"""
-        # 🔧 修復：確保資料庫連線正確關閉
+        # 確保資料庫連線正確關閉
         db = get_db_session()
         try:
             # 取得用戶最後同步時間
@@ -262,12 +261,12 @@ class GmailService:
                 db.commit()
                 return 0
 
-            # 🔧 修復：暫時釋放連線，在處理郵件時重新獲取
+            # 暫時釋放連線 在處理郵件時重新獲取
             user.last_sync_at = datetime.utcnow()
             db.commit()
             db.close()
 
-            # 處理郵件（每個郵件會獨立管理連線）
+            # 處理郵件
             for msg in messages:
                 message_details = self.get_message_details(msg["id"])
                 if message_details:
@@ -280,14 +279,14 @@ class GmailService:
 
         except Exception as e:
             logger.error(f"Failed to sync emails: {e}")
-            # 🔧 修復：發生錯誤時回滾
+            # 回滾
             try:
                 db.rollback()
             except:
-                pass  # 如果連線已關閉，忽略回滾錯誤
+                pass  
             return 0
         finally:
-            # 🔧 修復：確保連線關閉
+            # 確保連線關閉
             try:
                 db.close()
             except:

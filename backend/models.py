@@ -11,8 +11,8 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 from datetime import datetime
 
-# 🔧 完全修復：只保留模型定義，移除重複的資料庫引擎設定
-# 所有資料庫配置都由 database.py 統一管理
+# 只保留模型定義，移除重複的資料庫引擎設定
+# 資料庫配置都由 database.py 統一管理
 Base = declarative_base()
 
 
