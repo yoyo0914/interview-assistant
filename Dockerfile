@@ -4,12 +4,12 @@ FROM python:3.11-slim
 # 設定工作目錄
 WORKDIR /app
 
-# 安裝系統相依性
+# 安裝系統
 RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# 複製 requirements.txt 並安裝 Python 套件
+# 安裝套件
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
@@ -17,7 +17,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/ ./backend/
 COPY frontend/ ./frontend/
 
-# 建立資料庫目錄（用於持久化）
+# 建立資料庫目錄
 RUN mkdir -p /app/data
 
 # 設定環境變數（使用絕對路徑）
