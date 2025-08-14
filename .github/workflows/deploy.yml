@@ -80,7 +80,7 @@ jobs:
           --port 8000 \
           --memory 1Gi \
           --timeout 300 \
-          --update-env-vars="GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }},GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }},GOOGLE_REDIRECT_URI=https://interview-assistant-504380981542.asia-east1.run.app/auth/callback,OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }},FRONTEND_URL=https://interview-assistant-504380981542.asia-east1.run.app"
+          --update-env-vars="DATABASE_URL=${{ secrets.DATABASE_URL }},GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }},GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }},GOOGLE_REDIRECT_URI=https://interview-assistant-504380981542.asia-east1.run.app/auth/callback,OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }},FRONTEND_URL=https://interview-assistant-504380981542.asia-east1.run.app"
 
     # 部署後功能驗證
     - name: Wait for deployment
