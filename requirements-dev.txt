@@ -1,5 +1,0 @@
-flake8==6.0.0          # Python 語法檢查
-black==23.7.0          # 代碼格式化
-pytest==7.4.0          # 測試框架
-pytest-asyncio==0.21.0 # 非同步測試支援
-httpx==0.24.1          # API 測試用的HTTP客戶端
