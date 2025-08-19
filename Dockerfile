@@ -4,9 +4,13 @@ FROM python:3.11-slim
 # 設定工作目錄
 WORKDIR /app
 
-# 安裝系統
+# 安裝系統相依性（新增 PostgreSQL 客戶端相關）
 RUN apt-get update && apt-get install -y \
     curl \
+    libpq-dev \
+    gcc \
+    python3-dev \
+    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 # 安裝套件
